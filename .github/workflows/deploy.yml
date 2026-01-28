@@ -23,11 +23,12 @@ jobs:
         chmod 600 ~/.ssh/id_ed25519
 
     - name: Deploy via SSH
-      env:
-        CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-        CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
       run: |
         ssh -o StrictHostKeyChecking=no \
-            -o ProxyCommand="cloudflared access ssh --hostname ${{ secrets.SSH_HOST }}" \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-            "cd /srv/docker && docker compose pull && docker compose up -d"
+            -o ProxyCommand="cloudflared access ssh \
+            --hostname ${{ secrets.SSH_HOST }} \
+            --service-token-id ${{ secrets.CF_ACCESS_CLIENT_ID }} \
+            --service-token-secret ${{ secrets.CF_ACCESS_CLIENT_SECRET }}" \
+          ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+          "cd /srv/docker && docker compose pull && docker compose up -d"
+
