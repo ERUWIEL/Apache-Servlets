@@ -14,23 +14,22 @@ jobs:
 
     - name: Install cloudflared
       run: |
-        sudo mkdir -p /usr/share/keyrings
-        curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
-        echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" \
-          | sudo tee /etc/apt/sources.list.d/cloudflared.list
-
-        sudo apt-get update
-        sudo apt-get install -y cloudflared
+        curl -fsSL https://pkg.cloudflare.com/cloudflared-linux-amd64.deb -o cloudflared.deb
+        sudo dpkg -i cloudflared.deb
 
     - name: Setup SSH
       run: |
         mkdir -p ~/.ssh
         echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
         chmod 600 ~/.ssh/id_ed25519
+        printf "Host *\n  StrictHostKeyChecking no\n" > ~/.ssh/config
 
-    - name: Deploy via SSH
+    - name: Deploy via Cloudflare Access SSH
+      env:
+        CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+        CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
       run: |
-        ssh -o StrictHostKeyChecking=no \
-            -o ProxyCommand="cloudflared access ssh --hostname ${{ secrets.SSH_HOST }}" \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-            "cd /srv/docker && docker compose pull && docker compose up -d"
+        ssh \
+          -o ProxyCommand="cloudflared access ssh --hostname ${{ secrets.SSH_HOST }}" \
+          ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+          "cd /srv/docker && docker compose pull && docker compose up -d"
