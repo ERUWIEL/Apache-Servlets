@@ -14,10 +14,8 @@ jobs:
 
     - name: Install cloudflared
       run: |
-       sudo mkdir -p /usr/share/keyrings
-        curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
-        echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" \
-          | sudo tee /etc/apt/sources.list.d/cloudflared.list
+        curl -fsSL https://pkg.cloudflare.com/install.sh | sudo bash
+        sudo apt-get install -y cloudflared
 
     - name: Setup SSH
       run: |
@@ -33,4 +31,5 @@ jobs:
       run: |
         ssh \
           -o ProxyCommand="cloudflared access ssh --hostname ${{ secrets.SSH_HOST }}" \
-          ${{ secrets.SSH_USER }}@$_
+          ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+          "cd /srv/docker && docker compose pull && docker compose up -d"
