@@ -26,9 +26,10 @@ jobs:
       run: |
         ssh -o StrictHostKeyChecking=no \
             -o ProxyCommand="cloudflared access ssh \
-            --hostname ${{ secrets.SSH_HOST }} \
+            --hostname ssh.erwbyel.org \
             --service-token-id ${{ secrets.CF_ACCESS_CLIENT_ID }} \
             --service-token-secret ${{ secrets.CF_ACCESS_CLIENT_SECRET }}" \
-          ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+          erwbyel@ssh.erwbyel.org \
           "cd /srv/docker && docker compose pull && docker compose up -d"
+
 
