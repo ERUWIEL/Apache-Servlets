@@ -1,35 +1,80 @@
-name: Deploy
+name: Build and Deploy Java App
 
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
-
+    
     steps:
-    - uses: actions/checkout@v4
-
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: maven
+    
+    - name: Build with Maven
+      run: |
+        mvn clean package -DskipTests
+        echo "✅ Build completed"
+        ls -lh target/*.war
+    
     - name: Install cloudflared
       run: |
         curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
         sudo dpkg -i cloudflared.deb
-
-    - name: Setup SSH
+    
+    - name: Setup SSH with Cloudflare Access
       run: |
         mkdir -p ~/.ssh
         echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
         chmod 600 ~/.ssh/id_ed25519
-
-    - name: Deploy via SSH
+        
+        cat > ~/.ssh/config << EOF
+        Host ssh.erwbyel.org
+          ProxyCommand cloudflared access ssh --hostname %h --id ${{ secrets.CF_ACCESS_CLIENT_ID }} --secret ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          StrictHostKeyChecking no
+          UserKnownHostsFile /dev/null
+        EOF
+        chmod 600 ~/.ssh/config
+    
+    - name: Deploy WAR to Server
       run: |
-        ssh -o StrictHostKeyChecking=no \
-            -o ProxyCommand="cloudflared access ssh \
-            --hostname ssh.erwbyel.org \
-            --service-token-id ${{ secrets.CF_ACCESS_CLIENT_ID }} \
-            --service-token-secret ${{ secrets.CF_ACCESS_CLIENT_SECRET }}" \
-          erwbyel@ssh.erwbyel.org \
-          "cd /srv/docker && docker compose pull && docker compose up -d"
+        WAR_FILE=$(ls target/*.war | head -n 1)
+        WAR_NAME=$(basename $WAR_FILE)
+        
+        echo "📦 Deploying $WAR_NAME..."
+        
+        # Copiar WAR al servidor
+        scp $WAR_FILE erwbyel@ssh.erwbyel.org:/srv/docker/volumes/apps/tomcat-dev/webapps/
+        
+        # Reiniciar Tomcat
+        ssh erwbyel@ssh.erwbyel.org << 'ENDSSH'
+          echo "🔄 Restarting Tomcat..."
+          cd /srv/docker/stacks/apps/tomcat-dev
+          docker compose restart
+          
+          echo "⏳ Waiting for Tomcat to start..."
+          sleep 10
+          
+          echo "📊 Container status:"
+          docker compose ps
+          
+          echo "📝 Recent logs:"
+          docker compose logs --tail=20
+          
+          echo "✅ Deployment completed!"
+        ENDSSH
+    
+    - name: Verify Deployment
+      run: |
+        echo "🌐 Your app should be available at: https://demo.erwbyel.org/"
 
 
