@@ -9,30 +9,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
     - name: Install cloudflared
       run: |
-        curl -L \
-          https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
-          -o cloudflared
-        chmod +x cloudflared
-        sudo mv cloudflared /usr/local/bin/cloudflared
+        curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
+        sudo dpkg -i cloudflared.deb
 
     - name: Setup SSH
       run: |
         mkdir -p ~/.ssh
         echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
         chmod 600 ~/.ssh/id_ed25519
-        printf "Host *\n  StrictHostKeyChecking no\n" > ~/.ssh/config
 
-    - name: Deploy via Cloudflare Access SSH
+    - name: Deploy via SSH
       env:
         CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
         CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
       run: |
-        ssh \
-          -o ProxyCommand="cloudflared access ssh --hostname ${{ secrets.SSH_HOST }}" \
-          ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-          "cd /srv/docker && docker compose pull && docker compose up -d"
+        ssh -o StrictHostKeyChecking=no \
+            -o ProxyCommand="cloudflared access ssh --hostname ${{ secrets.SSH_HOST }}" \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            "cd /srv/docker && docker compose pull && docker compose up -d"
