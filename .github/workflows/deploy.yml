@@ -1,4 +1,4 @@
-name: Build and Deploy Java App
+name: Deploy to Homelab
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     
     steps:
     - name: Checkout code
@@ -26,85 +26,42 @@ jobs:
         echo "✅ Build completed"
         ls -lh target/*.war
     
-    - name: Install cloudflared
-      run: |
-        wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-        sudo dpkg -i cloudflared-linux-amd64.deb
-        cloudflared --version
-    
-    - name: Setup SSH Key
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-        chmod 600 ~/.ssh/id_ed25519
-        ssh-keyscan ssh.erwbyel.org >> ~/.ssh/known_hosts 2>/dev/null || true
-    
-    - name: Setup Cloudflare Access Credentials
-      run: |
-        # Crear archivo de credenciales para cloudflared
-        mkdir -p ~/.cloudflared
-        cat > ~/.cloudflared/access-creds.json << EOF
-        {
-          "id": "${{ secrets.CF_ACCESS_CLIENT_ID }}",
-          "secret": "${{ secrets.CF_ACCESS_CLIENT_SECRET }}"
-        }
-        EOF
-        chmod 600 ~/.cloudflared/access-creds.json
-        
-        # Configurar SSH para usar cloudflared con las credenciales
-        cat > ~/.ssh/config << 'EOF'
-        Host homelab
-          HostName ssh.erwbyel.org
-          User erwbyel
-          ProxyCommand bash -c 'cloudflared access ssh --hostname %h --id $(jq -r .id ~/.cloudflared/access-creds.json) --secret $(jq -r .secret ~/.cloudflared/access-creds.json)'
-          StrictHostKeyChecking no
-          UserKnownHostsFile=/dev/null
-          ServerAliveInterval 60
-        EOF
-        chmod 600 ~/.ssh/config
-        
-        # Instalar jq para parsear JSON
-        sudo apt-get update -qq && sudo apt-get install -y jq
-    
-    - name: Test SSH Connection
-      run: |
-        echo "🔌 Testing SSH connection..."
-        ssh homelab "echo '✅ Connected!' && whoami && hostname && uptime"
-    
-    - name: Deploy WAR to Server
+    - name: Deploy to Tomcat
       run: |
         WAR_FILE=$(ls target/*.war | head -n 1)
         WAR_NAME=$(basename "$WAR_FILE")
         
         echo "📦 Deploying $WAR_NAME..."
         
-        # Copiar WAR
-        scp "$WAR_FILE" homelab:/srv/docker/volumes/apps/tomcat-dev/webapps/
+        # Limpiar deployment anterior
+        rm -f /srv/docker/volumes/apps/tomcat-dev/webapps/*.war
+        rm -rf /srv/docker/volumes/apps/tomcat-dev/webapps/*/
+        
+        # Copiar nuevo WAR
+        cp "$WAR_FILE" /srv/docker/volumes/apps/tomcat-dev/webapps/ROOT.war
         
         # Reiniciar Tomcat
-        ssh homelab << 'ENDSSH'
-          set -e
-          cd /srv/docker/stacks/apps/tomcat-dev
-          
-          echo "🔄 Restarting Tomcat container..."
-          docker compose restart
-          
-          echo "⏳ Waiting for Tomcat..."
-          sleep 15
-          
-          echo "📊 Container status:"
-          docker compose ps
-          
-          echo "📝 Recent logs:"
-          docker compose logs --tail=30 tomcat
-          
-          echo "✅ Deployment completed!"
-        ENDSSH
+        cd /srv/docker/stacks/apps/tomcat-dev
+        docker compose restart
+        
+        echo "⏳ Waiting for Tomcat to start..."
+        sleep 20
+        
+        echo "📊 Container status:"
+        docker compose ps
+        
+        echo "✅ Deployment completed!"
     
-    - name: Verify Deployment
+    - name: Show deployment info
       run: |
-        echo "🎉 Deployment successful!"
-        echo "🌐 Your app is available at: https://demo.erwbyel.org/"
         echo ""
-        echo "📊 To check logs:"
-        echo "   ssh homelab 'docker logs -f tomcat-dev'"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "🎉 Deployment Successful!"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "🌐 Your app is live at:"
+        echo "   https://demo.erwbyel.org/"
+        echo ""
+        echo "📝 View logs with:"
+        echo "   docker logs -f tomcat-dev"
+        echo ""
