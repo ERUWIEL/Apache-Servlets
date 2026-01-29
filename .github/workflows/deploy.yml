@@ -1,4 +1,4 @@
-name: Deploy to Homelab
+name: deploy
 
 on:
   push:
@@ -19,6 +19,19 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
         cache: maven
+    
+    - name: Install Maven  # ← NUEVO PASO
+      run: |
+        # Verificar si Maven ya está instalado
+        if ! command -v mvn &> /dev/null; then
+          echo "📦 Installing Maven..."
+          sudo apt-get update -qq
+          sudo apt-get install -y maven
+          mvn --version
+        else
+          echo "✅ Maven already installed"
+          mvn --version
+        fi
     
     - name: Build with Maven
       run: |
@@ -61,7 +74,4 @@ jobs:
         echo ""
         echo "🌐 Your app is live at:"
         echo "   https://demo.erwbyel.org/"
-        echo ""
-        echo "📝 View logs with:"
-        echo "   docker logs -f tomcat-dev"
         echo ""
